@@ -73,13 +73,18 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	return NULL;
 }
 
-/* Insert PAGE into spt with validation. */
+/* Insert PAGE into spt with validation.
+   SPT에 page 구조체 삽입 */
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
-	/* TODO: Fill this function. */
-
+	// 이미 존재하는 가상 주소인지 확인
+	if(spt_find_page(spt, page->va) == NULL){
+		// 해시 테이블에 삽입
+		hash_insert(spt->spt_hash, &page->hash_elem);
+		succ = true;
+	}
 	return succ;
 }
 
