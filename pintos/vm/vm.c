@@ -60,13 +60,17 @@ err:
 	return false;
 }
 
-/* Find VA from spt and return page. On error, return NULL. */
+/* Find VA from spt and return page. On error, return NULL. 
+   SPT에서 특정 가상 주소 va에 대응하는 page 구조체 검색 */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
-
-	return page;
+	// hash_find - spt안에 있는 page->hash_elem를 가져옴
+	page = hash_entry(hash_find(spt->spt_hash,&page->hash_elem), struct page, hash_elem);
+	if(page->va == va) {
+		return page;
+	}
+	return NULL;
 }
 
 /* Insert PAGE into spt with validation. */
