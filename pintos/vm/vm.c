@@ -60,22 +60,31 @@ err:
 	return false;
 }
 
-/* Find VA from spt and return page. On error, return NULL. */
+/* Find VA from spt and return page. On error, return NULL. 
+   SPT에서 특정 가상 주소 va에 대응하는 page 구조체 검색 */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
-
-	return page;
+	// hash_find - spt안에 있는 page->hash_elem를 가져옴
+	page = hash_entry(hash_find(spt->spt_hash,&page->hash_elem), struct page, hash_elem);
+	if(page->va == va) {
+		return page;
+	}
+	return NULL;
 }
 
-/* Insert PAGE into spt with validation. */
+/* Insert PAGE into spt with validation.
+   SPT에 page 구조체 삽입 */
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
-	/* TODO: Fill this function. */
-
+	// 이미 존재하는 가상 주소인지 확인
+	if(spt_find_page(spt, page->va) == NULL){
+		// 해시 테이블에 삽입
+		hash_insert(spt->spt_hash, &page->hash_elem);
+		succ = true;
+	}
 	return succ;
 }
 
@@ -170,10 +179,21 @@ vm_do_claim_page (struct page *page) {
 
 	return swap_in (page, frame->kva);
 }
-
+/* 비교 함수 */
+bool page_less(const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+    struct page *pagea = hash_entry(a, struct page, hash_elem);
+    struct page *pageb = hash_entry(b, struct page, hash_elem);
+    return pagea->va < pageb->va;
+}
+/* 해시 함수 */
+uint64_t page_hash(const struct hash_elem *a, void *aux UNUSED) {
+    struct page *p = hash_entry(a, struct page, hash_elem);
+    return hash_bytes(&p->va,sizeof(p->va));
+}
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	hash_init (&spt->spt_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
