@@ -193,7 +193,7 @@ uint64_t page_hash(const struct hash_elem *a, void *aux UNUSED) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	hash_init (&spt->spt, page_hash, page_less, NULL);
+	hash_init (&spt->spt_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
