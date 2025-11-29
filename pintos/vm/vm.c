@@ -170,10 +170,21 @@ vm_do_claim_page (struct page *page) {
 
 	return swap_in (page, frame->kva);
 }
-
+/* 비교 함수 */
+bool page_less(const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+    struct page *pagea = hash_entry(a, struct page, hash_elem);
+    struct page *pageb = hash_entry(b, struct page, hash_elem);
+    return pagea->va < pageb->va;
+}
+/* 해시 함수 */
+uint64_t page_hash(const struct hash_elem *a, void *aux UNUSED) {
+    struct page *p = hash_entry(a, struct page, hash_elem);
+    return hash_bytes(&p->va,sizeof(p->va));
+}
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	hash_init (&spt->spt, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
