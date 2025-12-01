@@ -120,4 +120,13 @@ static bool
 spt_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
 
+struct file_load_aux
+{
+	struct file *file;
+	// off_t offset;
+	size_t read_bytes;
+	size_t zero_bytes;
+	// bool writable;
+};
+
 #endif  /* VM_VM_H */

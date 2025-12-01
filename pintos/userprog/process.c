@@ -710,12 +710,16 @@ install_page (void *upage, void *kpage, bool writable) {
 /* From here, codes will be used after project 3.
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
-
 static bool
 lazy_load_segment (struct page *page, void *aux) {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
+	struct file_load_aux *load_aux = (struct file_load_aux *) aux;
+	/* TODO : 파일에서 세그먼트를 로드합니다.
+	   주소 VA에서 첫 번째 페이지 폴트가 발생할 때 호출됩니다.
+	   VA는 이 함수를 호출할 때 사용할 수 있습니다. */
+	if(file_read(load_aux->file, page->frame->kva, load_aux->read_bytes) != (int) load_aux->read_bytes)
+		return false;
+	memset(page->frame->kva + load_aux->read_bytes, 0, load_aux->zero_bytes);
+	
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -746,8 +750,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+		/* lazy_load_segment에 정보를 전달하기 위해 aux를 설정합니다. */
 		void *aux = NULL;
+		struct file_load_aux load_aux;
+		load_aux.file = file;
+		load_aux.read_bytes = page_read_bytes;
+		load_aux.zero_bytes = page_zero_bytes;
+		aux = &load_aux;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 					writable, lazy_load_segment, aux))
 			return false;
