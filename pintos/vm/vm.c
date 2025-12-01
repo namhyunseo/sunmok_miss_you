@@ -68,7 +68,12 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	// va에 대한 검증 필요하려나
-	page =  page_lookup(va);
+
+	struct page *p;
+	struct hash_elem *e;
+	p->va = va;
+	e = hash_find(spt->pages, &p->he);
+	page = hash_entry(e, struct page, he);
 	
 	if (page == NULL) {
 		return false;
@@ -227,14 +232,3 @@ spt_less_func (const struct hash_elem *a,
 	return page_a->va > page_b->va;
 }
 
-/* SPT에서 원하는 페이지를 찾아서 반환한다. */
-struct page*
-page_lookup (const void *addr) {
-	struct page p;
-	struct hash_elem *e;
-	struct supplemental_page_table *pages = thread_current()->spt.pages;
-
-	p.va = addr;
-	e = hash_find(&pages, &p.he);
-	return e != NULL ? hash_entry(e, struct page, he) : NULL;
-} 
