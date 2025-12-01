@@ -76,7 +76,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	page = hash_entry(e, struct page, he);
 	
 	if (page == NULL) {
-		return false;
+		return NULL;
 	}
 
 	return page;
