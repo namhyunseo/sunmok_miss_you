@@ -4,6 +4,9 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+/* project3 spt */
+#include "hash.h"
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -64,7 +67,17 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function. */
+	// va에 대한 검증 필요하려나
+
+	struct page *p;
+	struct hash_elem *e;
+	p->va = va;
+	e = hash_find(spt->pages, &p->he);
+	page = hash_entry(e, struct page, he);
+	
+	if (page == NULL) {
+		return NULL;
+	}
 
 	return page;
 }
@@ -73,9 +86,12 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
-	int succ = false;
-	/* TODO: Fill this function. */
+	bool succ = false;
 
+	struct hash_elem *old = hash_insert(spt->pages, &page->he);
+	if (old == NULL) { 
+		succ = true;
+	}
 	return succ;
 }
 
@@ -174,17 +190,45 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+	/* 해쉬 테이블 초기화 */
+	hash_init(spt->pages, spt_hash_func, spt_less_func, NULL);
+
 }
 
 /* Copy supplemental page table from src to dst */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+supplemental_page_table_copy (struct supplemental_page_table *dst,
+		struct supplemental_page_table *src) {
 }
 
 /* Free the resource hold by the supplemental page table */
 void
-supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
 }
+
+/* va에 대한 hash값을 구해서 반환한다. */
+static uint64_t
+spt_hash_func (const struct hash_elem *hash_e, void *aux) {
+	struct page *page = hash_entry(hash_e, struct page, he);
+
+	/* hash 값 계산 */
+	void *va = page->va;
+	uint64_t hash = hash_bytes(va, sizeof(va));
+
+	return hash;
+}
+
+/* 해쉬 두개의 크기를 비교한다. 보조 테이블 활용 가능*/
+static bool
+spt_less_func (const struct hash_elem *a,
+		const struct hash_elem *b,
+		void *aux) {
+
+	struct page *page_a = hash_entry(a, struct page, he);
+	struct page *page_b = hash_entry(b, struct page, he);
+
+	return page_a->va > page_b->va;
+}
+
