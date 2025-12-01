@@ -189,7 +189,7 @@ vm_do_claim_page (struct page *page) {
 
 /* Initialize new supplemental page table */
 void
-supplemental_page_table_init (struct supplemental_page_table *spt) {
+supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	/* 해쉬 테이블 초기화 */
 	hash_init(spt->pages, spt_hash_func, spt_less_func, NULL);
 
