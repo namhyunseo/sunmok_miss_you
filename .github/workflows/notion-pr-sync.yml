@@ -1,60 +1,125 @@
-name: GitHub → Notion Sync
+name: GitHub → Notion Sync (PR + Issue Full Automation)
 
 on:
   pull_request:
-    types: [opened, reopened, closed, synchronize]
+    types: [opened, reopened, closed, edited, synchronize]
   issues:
     types: [opened, edited, closed, reopened]
 
 jobs:
-  sync-pr:
-    if: github.event_name == 'pull_request'
+  sync:
     runs-on: ubuntu-latest
-    steps:
-      - name: Update Notion for PR
-        run: |
-          curl -X PATCH "https://api.notion.com/v1/pages/$NOTION_PR_PAGE_ID" \
-          -H "Authorization: Bearer $NOTION_TOKEN" \
-          -H "Content-Type: application/json" \
-          -H "Notion-Version: 2022-06-28" \
-          --data "{
-            \"properties\": {
-              \"PR 상태\": { \"select\": { \"name\": \"${PR_STATE}\" } },
-              \"PR 번호\": { \"number\": ${PR_NUMBER} },
-              \"PR 제목\": { \"rich_text\": [{ \"text\": { \"content\": \"${PR_TITLE}\" }}]},
-              \"PR 링크\": { \"url\": \"${PR_URL}\" }
-            }
-          }"
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_PR_PAGE_ID: ${{ secrets.NOTION_PR_PAGE_ID }}
-          PR_STATE: ${{ github.event.pull_request.state }}          # open / closed
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
 
-  sync-issue:
-    if: github.event_name == 'issues'
-    runs-on: ubuntu-latest
     steps:
-      - name: Update Notion for Issue
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Determine event type
+        id: ev
         run: |
-          curl -X PATCH "https://api.notion.com/v1/pages/$NOTION_ISSUE_PAGE_ID" \
-          -H "Authorization: Bearer $NOTION_TOKEN" \
-          -H "Content-Type: application/json" \
-          -H "Notion-Version: 2022-06-28" \
-          --data "{
-            \"properties\": {
-              \"Issue 상태\": { \"select\": { \"name\": \"${ISSUE_STATE}\" } },
-              \"Issue 번호\": { \"number\": ${ISSUE_NUMBER} },
-              \"Issue 제목\": { \"rich_text\": [{ \"text\": { \"content\": \"${ISSUE_TITLE}\" }}]},
-              \"Issue 링크\": { \"url\": \"${ISSUE_URL}\" }
-            }
-          }"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            echo "type=pr" >> $GITHUB_OUTPUT
+          else
+            echo "type=issue" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract fields (PR)
+        if: steps.ev.outputs.type == 'pr'
+        id: pr
+        run: |
+          echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
+          echo "state=${{ github.event.pull_request.state }}" >> $GITHUB_OUTPUT
+          echo "url=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
+          body="${{ github.event.pull_request.body }}"
+          echo "body_esc=$(echo "$body" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+      - name: Extract fields (Issue)
+        if: steps.ev.outputs.type == 'issue'
+        id: issue
+        run: |
+          echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          echo "title=${{ github.event.issue.title }}" >> $GITHUB_OUTPUT
+          echo "state=${{ github.event.issue.state }}" >> $GITHUB_OUTPUT
+          echo "url=${{ github.event.issue.html_url }}" >> $GITHUB_OUTPUT
+          body="${{ github.event.issue.body }}"
+          echo "body_esc=$(echo "$body" | jq -Rs .)" >> $GITHUB_OUTPUT
+
+      - name: Search Notion page by number
+        id: search
+        run: |
+          QUERY_NUMBER="${{ steps.ev.outputs.type == 'pr' && steps.pr.outputs.number || steps.issue.outputs.number }}"
+          RESP=$(curl -s -X POST "https://api.notion.com/v1/search" \
+            -H "Authorization: Bearer $NOTION_TOKEN" \
+            -H "Notion-Version: 2022-06-28" \
+            -H "Content-Type: application/json" \
+            --data "{\"query\":\"$QUERY_NUMBER\",\"filter\":{\"value\":\"page\",\"property\":\"object\"}}")
+
+          PAGE_ID=$(echo "$RESP" | jq -r ".results[0].id // empty")
+          echo "page_id=$PAGE_ID" >> $GITHUB_OUTPUT
+
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          NOTION_ISSUE_PAGE_ID: ${{ secrets.NOTION_ISSUE_PAGE_ID }}
-          ISSUE_STATE: ${{ github.event.issue.state }}              # open / closed
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_URL: ${{ github.event.issue.html_url }}
+
+      - name: Create or update Notion page
+        run: |
+          TYPE="${{ steps.ev.outputs.type }}"
+          PAGE="${{ steps.search.outputs.page_id }}"
+          
+          if [ "$TYPE" = "pr" ]; then
+            NUMBER="${{ steps.pr.outputs.number }}"
+            TITLE="${{ steps.pr.outputs.title }}"
+            STATE="${{ steps.pr.outputs.state }}"
+            URL="${{ steps.pr.outputs.url }}"
+            BODY=$(echo ${{ steps.pr.outputs.body_esc }})
+            DB="${{ secrets.NOTION_PR_DB_ID }}"
+            STATUS=$( [ "$STATE" = "open" ] && echo "진행 중" || echo "완료" )
+          else
+            NUMBER="${{ steps.issue.outputs.number }}"
+            TITLE="${{ steps.issue.outputs.title }}"
+            STATE="${{ steps.issue.outputs.state }}"
+            URL="${{ steps.issue.outputs.url }}"
+            BODY=$(echo ${{ steps.issue.outputs.body_esc }})
+            DB="${{ secrets.NOTION_ISSUE_DB_ID }}"
+            STATUS=$( [ "$STATE" = "open" ] && echo "진행 중" || echo "완료" )
+          fi
+
+          if [ -z "$PAGE" ]; then
+            echo "Page not found → creating new one"
+            curl -s -X POST "https://api.notion.com/v1/pages" \
+            -H "Authorization: Bearer $NOTION_TOKEN" \
+            -H "Notion-Version: 2022-06-28" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"parent\": { \"database_id\": \"$DB\" },
+              \"properties\": {
+                \"번호\": { \"number\": $NUMBER },
+                \"이름\": { \"title\": [{ \"text\": { \"content\": \"$TITLE\" }}]},
+                \"상태\": { \"select\": { \"name\": \"$STATUS\" }},
+                \"링크\": { \"url\": \"$URL\" }
+              },
+              \"children\": [
+                {
+                  \"object\": \"block\",
+                  \"type\": \"paragraph\",
+                  \"paragraph\": {
+                    \"rich_text\": [{ \"type\": \"text\", \"text\": { \"content\": $BODY }}]
+                  }
+                }
+              ]
+            }"
+          else
+            echo "Page found ($PAGE) → updating"
+            curl -s -X PATCH "https://api.notion.com/v1/pages/$PAGE" \
+            -H "Authorization: Bearer $NOTION_TOKEN" \
+            -H "Notion-Version: 2022-06-28" \
+            -H "Content-Type: application/json" \
+            --data "{
+              \"properties\": {
+                \"상태\": { \"select\": { \"name\": \"$STATUS\" }},
+                \"링크\": { \"url\": \"$URL\" }
+              }
+            }"
+          fi
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
