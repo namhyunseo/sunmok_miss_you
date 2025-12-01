@@ -31,8 +31,10 @@ jobs:
           echo "title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
           echo "state=${{ github.event.pull_request.state }}" >> $GITHUB_OUTPUT
           echo "url=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
+
           body="${{ github.event.pull_request.body }}"
-          echo "body_esc=$(echo "$body" | jq -Rs .)" >> $GITHUB_OUTPUT
+          body_esc=$(printf '%s' "$body" | jq -Rs .)
+          echo "body_esc=$body_esc" >> $GITHUB_OUTPUT
 
       - name: Extract fields (Issue)
         if: steps.ev.outputs.type == 'issue'
@@ -42,8 +44,10 @@ jobs:
           echo "title=${{ github.event.issue.title }}" >> $GITHUB_OUTPUT
           echo "state=${{ github.event.issue.state }}" >> $GITHUB_OUTPUT
           echo "url=${{ github.event.issue.html_url }}" >> $GITHUB_OUTPUT
+
           body="${{ github.event.issue.body }}"
-          echo "body_esc=$(echo "$body" | jq -Rs .)" >> $GITHUB_OUTPUT
+          body_esc=$(printf '%s' "$body" | jq -Rs .)
+          echo "body_esc=$body_esc" >> $GITHUB_OUTPUT
 
       - name: Search Notion page by number
         id: search
