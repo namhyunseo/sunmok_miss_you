@@ -65,6 +65,7 @@ err:
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
+	page->va = va;
 	// hash_find - spt안에 있는 page->hash_elem를 가져옴
 	struct hash_elem *e = hash_find(spt->spt_hash,&page->hash_elem);
 	return e != NULL ? hash_entry (e, struct page, hash_elem) : NULL;
