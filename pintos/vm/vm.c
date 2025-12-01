@@ -66,11 +66,8 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	// hash_find - spt안에 있는 page->hash_elem를 가져옴
-	page = hash_entry(hash_find(spt->spt_hash,&page->hash_elem), struct page, hash_elem);
-	if(page->va == va) {
-		return page;
-	}
-	return NULL;
+	struct hash_elem *e = hash_find(spt->spt_hash,&page->hash_elem);
+	return e != NULL ? hash_entry (e, struct page, hash_elem) : NULL;
 }
 
 /* Insert PAGE into spt with validation.
@@ -79,10 +76,8 @@ bool
 spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
-	// 이미 존재하는 가상 주소인지 확인
-	if(spt_find_page(spt, page->va) == NULL){
-		// 해시 테이블에 삽입
-		hash_insert(spt->spt_hash, &page->hash_elem);
+	// 성공적으로 삽입되면 NULL 반환
+	if(hash_insert(spt->spt_hash, &page->hash_elem) == NULL) {
 		succ = true;
 	}
 	return succ;
