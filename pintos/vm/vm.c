@@ -147,7 +147,17 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
+	// palloc으로 프레임 할당
+	frame = palloc_get_page(PAL_USER);
+	
+	// 메모리가 가득 찼거나 공간 부족 등으로 실패
+	if (frame == NULL) {
+		palloc_free_page(frame);
+		PANIC("todo"); // swap 처리 필요
+		// 1. evict 대상 프레임 선택
+		// 2. 해당 프레임을 참조하는 페이지 테이블 항목 제거
+		// 3. 필요하면 swap 또는 파일로 기록
+	}
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -210,7 +220,9 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: 페이지의 VA를 프레임의 PA에 매핑하기 위해 페이지 테이블 항목을 삽입합니다. */
-	// Frame 테이블에 삽입
+	// Frame 테이블에 삽입 -> 근데 frame 테이블을 따로 선언하지 않았는데?, 따로 선언이 필요한가?
+	// 아니면 그냥 spt에 삽입하는건가? >> 논의 필요
+	// 그냥 spt에 삽입하는 것이 맞네 근데 swap_in으로 해주고 있는데 따로 필요한가?
 	return swap_in (page, frame->kva);
 }
 
