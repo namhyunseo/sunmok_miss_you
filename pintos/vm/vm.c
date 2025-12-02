@@ -63,7 +63,18 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			goto err;
 		// 2. uninit 페이지로 초기화 - "uninit" 페이지 구조체를 생성
 		uninit_new (page, upage, init, type, aux, NULL);
-		
+
+		// 타입별로 page_initializer 설정
+		switch (type) {
+			case VM_ANON:
+				page->uninit.page_initializer = anon_initializer;
+				break;
+			case VM_FILE:
+				page->uninit.page_initializer = file_backed_initializer;
+				break;
+			default:
+				goto err;
+		}
 		// 3. spt에 페이지 삽입
 		spt_insert_page(spt, page);
 	}
@@ -147,7 +158,7 @@ static void
 vm_stack_growth (void *addr UNUSED) {
 }
 
-/* Handle the fault on write_protected page */
+/* write_protected 페이지에서 오류를 처리합니다. */
 static bool
 vm_handle_wp (struct page *page UNUSED) {
 }
@@ -190,8 +201,8 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;
 	page->frame = frame;
 
-	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-
+	/* TODO: 페이지의 VA를 프레임의 PA에 매핑하기 위해 페이지 테이블 항목을 삽입합니다. */
+	// Frame 테이블에 삽입
 	return swap_in (page, frame->kva);
 }
 
