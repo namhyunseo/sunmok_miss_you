@@ -206,6 +206,12 @@ vm_dealloc_page (struct page *page) {
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
+	// spt에서 va에 해당하는 페이지 찾기
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	page = spt_find_page (spt, va);
+	if (page == NULL) {
+		return false;
+	}
 
 	return vm_do_claim_page (page);
 }
