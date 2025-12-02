@@ -129,20 +129,21 @@ vm_get_victim (void) {
 	return victim;
 }
 
-/* Evict one page and return the corresponding frame.
- * Return NULL on error.*/
+/* 한 페이지를 제거하고 해당 프레임을 반환합니다.
+ * 오류 발생 시 NULL을 반환합니다.*/
 static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
-	/* TODO: swap out the victim and return the evicted frame. */
+	/* TODO: 피해자를 교체하고 퇴출된 프레임을 반환합니다. */
 
 	return NULL;
 }
 
-/* palloc() and get frame. If there is no available page, evict the page
- * and return it. This always return valid address. That is, if the user pool
- * memory is full, this function evicts the frame to get the available memory
- * space.*/
+/* palloc() 함수를 사용하여 프레임을 가져옵니다. 
+ * 사용 가능한 페이지가 없으면 해당 페이지를 제거하고 반환합니다. 
+ * 이 함수는 항상 유효한 주소를 반환합니다. 
+ * 즉, 사용자 풀 메모리가 가득 차면 이 함수는 프레임을 제거하여 
+ * 사용 가능한 메모리 공간을 확보합니다.*/
 static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
@@ -169,9 +170,17 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
-	/* TODO: Validate the fault */
-	/* TODO: Your code goes here */
-
+	/* 페이지 유효성 검사 */
+	// 1. spt에서 페이지 찾기
+	page = spt_find_page(spt,addr);
+	// 2. 페이지가 존재하지 않으면 segfault
+	if (page == NULL) {
+		return false;
+	}
+	// 3. 페이지가 쓰기 보호 페이지에 대한 쓰기 시도인 경우
+	if (write && !page->file.writable) {
+		return vm_handle_wp(page);		// 구현 필요
+	}
 	return vm_do_claim_page (page);
 }
 
@@ -183,16 +192,15 @@ vm_dealloc_page (struct page *page) {
 	free (page);
 }
 
-/* Claim the page that allocate on VA. */
+/* VA에 할당된 페이지를 청구합니다. */
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
-	/* TODO: Fill this function */
 
 	return vm_do_claim_page (page);
 }
 
-/* Claim the PAGE and set up the mmu. */
+/* 페이지를 요청하고 mmu를 설정합니다. */
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
