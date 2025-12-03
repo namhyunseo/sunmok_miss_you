@@ -6,6 +6,7 @@
 
 /* project3 spt */
 #include "hash.h"
+#include "threads/mmu.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -226,9 +227,12 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: 페이지의 VA를 프레임의 PA에 매핑하기 위해 페이지 테이블 항목을 삽입합니다. */
-	// Frame 테이블에 삽입 -> 근데 frame 테이블을 따로 선언하지 않았는데?, 따로 선언이 필요한가?
-	// 아니면 그냥 spt에 삽입하는건가? >> 논의 필요
-	// 그냥 spt에 삽입하는 것이 맞네 근데 swap_in으로 해주고 있는데 따로 필요한가?
+	// Frame 테이블에 삽입 -> pml4에 매핑
+	struct thread *curr = thread_current();
+	// pml4에 매핑이 안되면(= 메모리 할당 실패) false 반환
+	if(!pml4_set_page(curr->pml4, page->va, frame->kva, page->file.writable)) {
+		return false;
+	}
 	return swap_in (page, frame->kva);
 }
 
