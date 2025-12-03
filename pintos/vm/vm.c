@@ -47,26 +47,26 @@ static struct frame *vm_evict_frame (void);
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
-
+	printf("[DEBUG] thread magic: %x\n", thread_current()->magic);
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
-
 	/* uppage가 이미 사용 중인지 확인하세요. */
 	if (spt_find_page (spt, upage) == NULL) {
 		/* TODO: 페이지를 생성하고, VM 유형에 따라 초기화 파일을 가져온 다음, 
 		uninit_new를 호출하여 "uninit" 페이지 구조체를 생성합니다. 
 		uninit_new를 호출한 후 필드를 수정해야 합니다. */
 
-		// 1. 페이지 생성 - VM 유형에 따라 초기화 파일 가져오기
-		struct page *page = vm_alloc_page(type, upage, writable);
+		// 1. 페이지 생성 - palloc으로 할당 하려 하였으나 remove쪽에서 free하기 때문에 malloc으로 변경
+		struct page *page = malloc(sizeof(struct page));
+		
 		if (page == NULL)
 			goto err;
 		// 2. uninit 페이지로 초기화 - "uninit" 페이지 구조체를 생성
 		uninit_new (page, upage, init, type, aux, NULL);
 
 		// 타입별로 page_initializer 설정
-		switch (type) {
+		switch (type) { 
 			case VM_ANON:
 				page->uninit.page_initializer = anon_initializer;
 				break;
@@ -79,6 +79,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		// 3. spt에 페이지 삽입
 		spt_insert_page(spt, page);
 	}
+
 err:
 	return false;
 }
@@ -88,11 +89,14 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	// va에 대한 검증 필요하려나
-
-	struct page *p;
-	struct hash_elem *e;
+	// 초기화되지 않은 페이지의 va를 찾을 때 문제가 될 수도?
+	struct page *p = malloc(sizeof(struct page));
 	p->va = va;
-	e = hash_find(spt->pages, &p->he);
+	struct hash_elem *e = hash_find(spt->pages, &p->he);
+	if(e == NULL){
+		return NULL;
+	}
+	free(p);
 	page = hash_entry(e, struct page, he);
 	
 	if (page == NULL) {
@@ -149,11 +153,12 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	// palloc으로 프레임 할당
-	frame = palloc_get_page(PAL_USER);
+	frame->kva = palloc_get_page(PAL_USER);
+	frame = malloc(sizeof(struct frame));
 	
 	// 메모리가 가득 찼거나 공간 부족 등으로 실패
 	if (frame == NULL) {
-		palloc_free_page(frame);
+		palloc_free_page(frame->kva);
 		PANIC("todo"); // swap 처리 필요
 		// 1. evict 대상 프레임 선택
 		// 2. 해당 프레임을 참조하는 페이지 테이블 항목 제거
@@ -179,7 +184,7 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* 페이지 유효성 검사 */
 	// 1. spt에서 페이지 찾기
@@ -192,7 +197,13 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (write && !page->file.writable) {
 		return vm_handle_wp(page);		// 구현 필요
 	}
-	return vm_do_claim_page (page);
+	// 4. 페이지가 존재하지 않는 경우 (not_present)
+	if (not_present) {
+		// 페이지를 청구합니다.
+		return vm_do_claim_page (page);
+	}
+	// 존재하는 경우..? -- 이미 있는데 뭘해
+	return false;
 }
 
 /* Free the page.
@@ -230,7 +241,9 @@ vm_do_claim_page (struct page *page) {
 	// Frame 테이블에 삽입 -> pml4에 매핑
 	struct thread *curr = thread_current();
 	// pml4에 매핑이 안되면(= 메모리 할당 실패) false 반환
-	if(!pml4_set_page(curr->pml4, page->va, frame->kva, page->file.writable)) {
+	if(pml4_get_page (curr->pml4, page->va) == NULL
+			&& pml4_set_page(curr->pml4, page->va, frame->kva, page->file.writable)) {
+		palloc_free_page(frame->kva);
 		return false;
 	}
 	return swap_in (page, frame->kva);
@@ -240,6 +253,7 @@ vm_do_claim_page (struct page *page) {
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	/* 해쉬 테이블 초기화 */
+	spt->pages = malloc(sizeof(struct hash));
 	hash_init(spt->pages, spt_hash_func, spt_less_func, NULL);
 
 }
@@ -263,8 +277,7 @@ spt_hash_func (const struct hash_elem *hash_e, void *aux) {
 	struct page *page = hash_entry(hash_e, struct page, he);
 
 	/* hash 값 계산 */
-	void *va = page->va;
-	uint64_t hash = hash_bytes(va, sizeof(va));
+	uint64_t hash = hash_bytes(&page->va, sizeof(page->va));
 
 	return hash;
 }
