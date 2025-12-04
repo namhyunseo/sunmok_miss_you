@@ -368,12 +368,12 @@ process_activate (struct thread *next) {
  * This appears at the very beginning of an ELF binary. */
 struct ELF64_hdr {
 	unsigned char e_ident[EI_NIDENT];
-	uint16_t e_type;
+	uint16_t e_type; // file 종류 (실행 파일, 공유 라이브러리)
 	uint16_t e_machine;
 	uint32_t e_version;
-	uint64_t e_entry;
-	uint64_t e_phoff;
-	uint64_t e_shoff;
+	uint64_t e_entry; // 프로그램 진입점 가상 주소
+	uint64_t e_phoff; // 프로그램 헤더 테이블 주소
+	uint64_t e_shoff; // 섹션 헤더 테이블 주소
 	uint32_t e_flags;
 	uint16_t e_ehsize;
 	uint16_t e_phentsize;
@@ -384,11 +384,11 @@ struct ELF64_hdr {
 };
 
 struct ELF64_PHDR {
-	uint32_t p_type;
-	uint32_t p_flags;
-	uint64_t p_offset;
-	uint64_t p_vaddr;
-	uint64_t p_paddr;
+	uint32_t p_type; // 세그먼트 종류
+	uint32_t p_flags; // 세그먼트 권한
+	uint64_t p_offset; // 세그먼트 시작 위치 (파일 내 절대 위치)
+	uint64_t p_vaddr; // 시작 주소
+	uint64_t p_paddr; // 실제 물리 주소
 	uint64_t p_filesz;
 	uint64_t p_memsz;
 	uint64_t p_align;
@@ -460,7 +460,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
 		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
 			goto done;
-		file_ofs += sizeof phdr;
+		file_ofs += sizeof phdr; // 다음 세그먼트 지정 ?
 		switch (phdr.p_type) {
 			case PT_NULL:
 			case PT_NOTE:
@@ -477,15 +477,15 @@ load (const char *file_name, struct intr_frame *if_) {
 				if (validate_segment (&phdr, file)) {
 					bool writable = (phdr.p_flags & PF_W) != 0;
 					uint64_t file_page = phdr.p_offset & ~PGMASK;
-					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
-					uint64_t page_offset = phdr.p_vaddr & PGMASK;
+					uint64_t mem_page = phdr.p_vaddr & ~PGMASK; // 페이지 번호
+					uint64_t page_offset = phdr.p_vaddr & PGMASK; // 페이지 오프셋
 					uint32_t read_bytes, zero_bytes;
 					if (phdr.p_filesz > 0) {
 						/* Normal segment.
 						 * Read initial part from disk and zero the rest. */
-						read_bytes = page_offset + phdr.p_filesz;
+						read_bytes = page_offset + phdr.p_filesz; /* 읽어야 할 바이트 */
 						zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
-								- read_bytes);
+								- read_bytes); /* 0으로 채워야 할 바이트 */
 					} else {
 						/* Entirely zero.
 						 * Don't read anything from disk. */
@@ -712,10 +712,25 @@ install_page (void *upage, void *kpage, bool writable) {
  * upper block. */
 
 static bool
-lazy_load_segment (struct page *page, void *aux) {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
+lazy_load_segment (struct page *page, struct aux_page *aux) {
+	/* TODO: 파일로부터 세그먼트를 로드한다. */
+	/* TODO: 이 함수는 주소 VA에서 첫 번째 페이지 폴트가 발생했을 때 호출된다. */
+	/* TODO: 이 함수를 호출할 때 VA는 유효하게 제공된다. */
+	struct file *file = aux->file;
+	off_t ofs = aux->ofs;
+	size_t read = aux->page_read_byte;
+	size_t zero = aux->page_zero_byte;
+	void *kva = page->frame->kva;
+
+	// file의 ofs부터 read만큼 읽어오면 되겠다
+	off_t readbyte = file_read_at(file, kva, read, ofs);
+	if(readbyte == 0){ 
+		free(aux);
+		return false;
+	}
+	memset(kva + read, 0, zero);
+	free(aux);
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -747,15 +762,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		struct aux_page *aux = malloc(sizeof *aux);
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->page_read_byte = page_read_bytes;
+		aux->page_zero_byte = page_zero_bytes;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+					writable, lazy_load_segment, aux)){
+			free(aux);
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -766,11 +788,13 @@ setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
-	/* TODO: Map the stack on stack_bottom and claim the page immediately.
-	 * TODO: If success, set the rsp accordingly.
-	 * TODO: You should mark the page is stack. */
-	/* TODO: Your code goes here */
+	bool succ = vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true);
+	if(!succ) return success;
 
+	if(vm_claim_page(stack_bottom)){
+		success = true;
+		if_->rsp = stack_bottom + PGSIZE;
+	}
 	return success;
 }
 #endif /* VM */

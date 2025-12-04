@@ -48,6 +48,8 @@ struct page {
 
 	/* project3 spt */
 	struct hash_elem he;
+	bool writable;
+	bool is_stack;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -67,15 +69,22 @@ struct frame {
 	struct page *page;
 };
 
-/* The function table for page operations.
- * This is one way of implementing "interface" in C.
- * Put the table of "method" into the struct's member, and
- * call it whenever you needed. */
+/* 페이지 연산을 위한 함수 테이블.
+ * 이것은 C에서 "인터페이스"를 구현하는 한 가지 방식이다.
+ * "메서드"들의 테이블을 구조체의 멤버에 넣어두고,
+ * 필요할 때마다 그것을 호출한다. */
 struct page_operations {
 	bool (*swap_in) (struct page *, void *);
 	bool (*swap_out) (struct page *);
 	void (*destroy) (struct page *);
 	enum vm_type type;
+};
+
+struct aux_page {
+	size_t page_read_byte;
+	size_t page_zero_byte;
+	struct file *file;
+	off_t ofs;
 };
 
 #define swap_in(page, v) (page)->operations->swap_in ((page), v)
@@ -87,10 +96,11 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-	struct hash *pages;
+	struct hash pages;
 };
 
 #include "threads/thread.h"
+
 void supplemental_page_table_init (struct supplemental_page_table *spt);
 bool supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src);
@@ -104,10 +114,11 @@ void vm_init (void);
 bool vm_try_handle_fault (struct intr_frame *f, void *addr, bool user,
 		bool write, bool not_present);
 
+/* project3 */
 #define vm_alloc_page(type, upage, writable) \
 	vm_alloc_page_with_initializer ((type), (upage), (writable), NULL, NULL)
-bool vm_alloc_page_with_initializer (enum vm_type type, void *upage,
-		bool writable, vm_initializer *init, void *aux);
+bool vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
+		vm_initializer *init, struct aux_page *aux);
 void vm_dealloc_page (struct page *page);
 bool vm_claim_page (void *va);
 enum vm_type page_get_type (struct page *page);
