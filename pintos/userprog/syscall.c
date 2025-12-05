@@ -112,7 +112,6 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 			char *buf = f->R.rsi;
 			unsigned size = f->R.rdx;
 
-			/* TD : 2 need to validate fd, buf */ 
 			struct thread *cur = thread_current();
 			validate_fd(fd);
 			validate_addr(buf);

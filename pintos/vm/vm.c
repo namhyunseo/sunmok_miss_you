@@ -1,3 +1,4 @@
+// pintos -v -k -T 60 -m 20   --fs-disk=10 -p tests/userprog/create-normal:create-normal --swap-disk=4 -- -q   -f run create-normal < /dev/null 2> tests/userprog/create-normal.errors > tests/userprog/create-normal.output
 /* vm.c: Generic interface for virtual memory objects. */
 
 #include "threads/malloc.h"
@@ -181,11 +182,21 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	
 	/* va가 SPT에 있는지 확인*/
-	if(!(page = spt_find_page(spt, addr))){
-		return false;
+	void *upage = pg_round_down (addr);
+	if(!(page = spt_find_page(spt, upage))) return false;
+
+	bool suc_claim = true;
+	if(not_present){
+		bool suc_claim = vm_do_claim_page (page);
 	}
 
-	return vm_do_claim_page (page);
+	bool is_writable = true;
+	if(write && !page->writable){
+		is_writable = false;
+	}
+
+	/* user에 대한 평가도 진행하긴 해야할 것 같다. 그런데 뭘 해야할지 모르겠음*/
+	return suc_claim && is_writable;
 }
 
 /* Free the page.
