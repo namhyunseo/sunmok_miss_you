@@ -794,9 +794,15 @@ setup_stack (struct intr_frame *if_) {
 	// vm_alloc_page를 사용하여 페이지 할당
 	if (vm_alloc_page (VM_ANON | VM_MARKER_0, stack_bottom, true)) {
 		success = true;
+	}
+	// 매핑이 되면 success를 true로, rsp 설정
+	if (success && vm_claim_page (stack_bottom)){
+		success = true;
 		if_->rsp = stack_bottom + PGSIZE;
 	}
-	vm_claim_page (stack_bottom);
+	else{
+		success = false;
+	}
 	
 	return success;
 }

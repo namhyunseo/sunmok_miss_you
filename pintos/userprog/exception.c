@@ -152,6 +152,7 @@ page_fault (struct intr_frame *f) {
 				not_present ? "not present" : "rights violation",
 				write ? "writing" : "reading",
 				user ? "user" : "kernel");
+		kill (f);
 	}
 #endif
 
@@ -162,6 +163,4 @@ page_fault (struct intr_frame *f) {
 		thread_current ()->exit_num = -1;
 		thread_exit ();
 	}
-	
-	kill (f);
 }

@@ -76,14 +76,24 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			case VM_ANON | VM_MARKER_0:
 				page->uninit.page_initializer = anon_initializer;
 				break;
+			// TODO: 논의 필요
+			// case VM_UNINIT:
+			// 	page->uninit.page_initializer = NULL;
+			// 	break;
 			default:
 				free(page);
 				goto err;
 		}
+		// TODO: 페이지가 insert가 되지 않는다면
 		// 3. spt에 페이지 삽입
-		spt_insert_page(spt, page);
+		if (spt_insert_page(spt, page)){
+			return true;
+		}
+		else{
+			free(page);
+			goto err;
+		}
 	}
-	return true;
 
 err:
 	return false;
@@ -197,6 +207,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* 페이지 유효성 검사 */
+	// TODO : spt_find_page안에서 pg_round_down을 하는 것이 아닌 여기서만 하는 것이 맞겠다.
 	// 1. spt에서 페이지 찾기
 	page = spt_find_page(spt,addr);
 	// 2. 페이지가 존재하지 않으면 segfault
@@ -204,6 +215,8 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		return false;
 	}
 	// 3. SPT에 있지만 쓰기 보호인 경우
+	// TODO: not_prsent가 정확히 어떤 변수인지 -- PTE 테이블에 없다
+	// 단순 존재하지 않는다가 spt에서 존재하지 않는 것인지
 	if (write && !not_present) {
 		return vm_handle_wp(page);		// 구현 필요
 	}
