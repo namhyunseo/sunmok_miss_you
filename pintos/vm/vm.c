@@ -65,17 +65,17 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		page->writable = writable;
 		
 		switch (type){
-			case VM_ANON :
-				page->uninit.page_initializer = anon_initializer;
-				break;
+		case VM_ANON :
+			page->uninit.page_initializer = anon_initializer;
+			break;
+	
+		case VM_FILE :
+			page->uninit.page_initializer = file_backed_initializer;
+			break;
 		
-			case VM_FILE :
-				page->uninit.page_initializer = file_backed_initializer;
-				break;
-			
-			case VM_ANON | VM_MARKER_0 :
-				page->uninit.page_initializer = anon_initializer;
-				break;
+		case VM_ANON | VM_MARKER_0 :
+			page->uninit.page_initializer = anon_initializer;
+			break;
 		}
 
 		bool succ = spt_insert_page(spt, page);
@@ -185,18 +185,20 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	void *upage = pg_round_down (addr);
 	if(!(page = spt_find_page(spt, upage))) return false;
 
+	/* write access */
+	if(write && !page->writable){
+		return vm_handle_wp(page);
+	}
+
+	/* present */
 	bool suc_claim = true;
 	if(not_present){
 		bool suc_claim = vm_do_claim_page (page);
 	}
 
-	bool is_writable = true;
-	if(write && !page->writable){
-		is_writable = false;
-	}
-
 	/* user에 대한 평가도 진행하긴 해야할 것 같다. 그런데 뭘 해야할지 모르겠음*/
-	return suc_claim && is_writable;
+
+	return suc_claim;
 }
 
 /* Free the page.
@@ -211,7 +213,7 @@ vm_dealloc_page (struct page *page) {
 bool
  vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
-	/* spt에서 특정 페이지를 가져온다. */
+	/* spt에서 데이터로 채워야 하는 페이지를 가져온다. */
 	page = spt_find_page(&thread_current()->spt, va);
 	if(page == NULL) return NULL;
 

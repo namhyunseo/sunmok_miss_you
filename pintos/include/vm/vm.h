@@ -49,7 +49,6 @@ struct page {
 	/* project3 spt */
 	struct hash_elem he;
 	bool writable;
-	bool is_stack;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */

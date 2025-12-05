@@ -713,21 +713,20 @@ install_page (void *upage, void *kpage, bool writable) {
 
 static bool
 lazy_load_segment (struct page *page, struct aux_page *aux) {
-	/* TODO: 파일로부터 세그먼트를 로드한다. */
-	/* TODO: 이 함수는 주소 VA에서 첫 번째 페이지 폴트가 발생했을 때 호출된다. */
-	/* TODO: 이 함수를 호출할 때 VA는 유효하게 제공된다. */
+	/* aux에 있던 정보를 가져온다. */
 	struct file *file = aux->file;
 	off_t ofs = aux->ofs;
 	size_t read = aux->page_read_byte;
 	size_t zero = aux->page_zero_byte;
+	
+	/* file의 ofs위치 부터 읽는다. */
 	void *kva = page->frame->kva;
-
-	// file의 ofs부터 read만큼 읽어오면 되겠다
 	off_t readbyte = file_read_at(file, kva, read, ofs);
 	if(readbyte == 0){ 
 		free(aux);
 		return false;
 	}
+	/* 남은 byte를 0으로 채운다. */
 	memset(kva + read, 0, zero);
 	free(aux);
 	return true;
@@ -755,12 +754,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT (ofs % PGSIZE == 0);
 
 	while (read_bytes > 0 || zero_bytes > 0) {
-		/* Do calculate how to fill this page.
-		 * We will read PAGE_READ_BYTES bytes from FILE
-		 * and zero the final PAGE_ZERO_BYTES bytes. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
+		/* 데이터 load할 때 필요한 정보를 aux에 넣어서 전달 */
 		struct aux_page *aux = malloc(sizeof *aux);
 		aux->file = file;
 		aux->ofs = ofs;
@@ -775,7 +772,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
+		/* segment를 page단위로 읽는다. */
 		upage += PGSIZE;
+		/* 읽은 만큼 ofs을 변화시킨다. */
 		ofs += page_read_bytes;
 	}
 	return true;
@@ -790,6 +789,7 @@ setup_stack (struct intr_frame *if_) {
 	bool succ = vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, true);
 	if(!succ) return success;
 
+	/* 새로운 page를 할당해서 stack 영역으로 할당한다 */
 	if(vm_claim_page(stack_bottom)){
 		success = true;
 		if_->rsp = stack_bottom + PGSIZE;
