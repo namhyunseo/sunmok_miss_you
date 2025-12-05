@@ -76,7 +76,11 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		case VM_ANON | VM_MARKER_0 :
 			page->uninit.page_initializer = anon_initializer;
 			break;
+		default :
+			free(page);
+			goto err;
 		}
+
 
 		bool succ = spt_insert_page(spt, page);
 		if (!succ) {
@@ -155,6 +159,7 @@ vm_evict_frame (void) {
 static struct frame *
 vm_get_frame (void) {
 	void *kva = palloc_get_page(PAL_USER);
+	if (!kva) PANIC("todo");
 	struct frame *frame = malloc(sizeof *frame);
 	frame->kva = kva;
 	frame->page = NULL;
