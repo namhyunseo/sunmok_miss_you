@@ -48,6 +48,7 @@ struct page {
 
 	/* project3 spt */
 	struct hash_elem he;
+	bool writable;         /* True if writable, false if read-only */
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -123,7 +124,7 @@ spt_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux);
 struct file_load_aux
 {
 	struct file *file;
-	// off_t offset;
+	off_t offset;
 	size_t read_bytes;
 	size_t zero_bytes;
 	// bool writable;

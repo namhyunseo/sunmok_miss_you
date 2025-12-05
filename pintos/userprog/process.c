@@ -716,7 +716,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO : 파일에서 세그먼트를 로드합니다.
 	   주소 VA에서 첫 번째 페이지 폴트가 발생할 때 호출됩니다.
 	   VA는 이 함수를 호출할 때 사용할 수 있습니다. */
-	if(file_read(load_aux->file, page->frame->kva, load_aux->read_bytes) != (int) load_aux->read_bytes){
+	if(file_read_at(load_aux->file, page->frame->kva, load_aux->read_bytes, load_aux->offset) != (int) load_aux->read_bytes){
 		free(aux);
 		return false;
 	}
@@ -762,6 +762,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		load_aux->file = file;
 		load_aux->read_bytes = page_read_bytes;
 		load_aux->zero_bytes = page_zero_bytes;
+		load_aux->offset = ofs;
 		
 		// aux가 유효한 힙 포인터인지 출력으로 확인
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
@@ -773,6 +774,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
+		ofs += page_read_bytes;
 		upage += PGSIZE;
 	}
 	return true;
@@ -784,11 +786,18 @@ setup_stack (struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
-	/* TODO: Map the stack on stack_bottom and claim the page immediately.
-	 * TODO: If success, set the rsp accordingly.
-	 * TODO: You should mark the page is stack. */
-	/* TODO: Your code goes here */
-
+	/* stack_bottom에 스택을 매핑하고 페이지를 즉시 요청하세요.(vm_alloc_page으로 페이지 할당)
+	 * 성공하면 rsp를 적절하게 설정하세요.
+	 * 페이지를 스택으로 표시해야 합니다 */
+	// 가상주소에 페이지가 없는지 확인한 다음 해당 주소에 페이지를 매핑한다.
+	// 페이지를 스택으로 표시
+	// vm_alloc_page를 사용하여 페이지 할당
+	if (vm_alloc_page (VM_ANON | VM_MARKER_0, stack_bottom, true)) {
+		success = true;
+		if_->rsp = stack_bottom + PGSIZE;
+	}
+	vm_claim_page (stack_bottom);
+	
 	return success;
 }
 #endif /* VM */

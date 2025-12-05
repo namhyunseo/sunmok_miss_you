@@ -47,7 +47,6 @@ static struct frame *vm_evict_frame (void);
 bool
 vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		vm_initializer *init, void *aux) {
-	printf("[DEBUG] thread magic: %x\n", thread_current()->magic);
 	ASSERT (VM_TYPE(type) != VM_UNINIT)
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
@@ -59,11 +58,12 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		// 1. 페이지 생성 - palloc으로 할당 하려 하였으나 remove쪽에서 free하기 때문에 malloc으로 변경
 		struct page *page = malloc(sizeof(struct page));
-		
+
 		if (page == NULL)
 			goto err;
 		// 2. uninit 페이지로 초기화 - "uninit" 페이지 구조체를 생성
 		uninit_new (page, upage, init, type, aux, NULL);
+		page->writable = writable;  // writable 설정
 
 		// 타입별로 page_initializer 설정
 		switch (type) { 
@@ -73,12 +73,17 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			case VM_FILE:
 				page->uninit.page_initializer = file_backed_initializer;
 				break;
+			case VM_ANON | VM_MARKER_0:
+				page->uninit.page_initializer = anon_initializer;
+				break;
 			default:
+				free(page);
 				goto err;
 		}
 		// 3. spt에 페이지 삽입
 		spt_insert_page(spt, page);
 	}
+	return true;
 
 err:
 	return false;
@@ -91,18 +96,19 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	// va에 대한 검증 필요하려나
 	// 초기화되지 않은 페이지의 va를 찾을 때 문제가 될 수도?
 	struct page *p = malloc(sizeof(struct page));
-	p->va = va;
+	p->va = pg_round_down(va);
 	struct hash_elem *e = hash_find(spt->pages, &p->he);
 	if(e == NULL){
+		free(p);
 		return NULL;
 	}
-	free(p);
-	page = hash_entry(e, struct page, he);
 	
+	page = hash_entry(e, struct page, he);
+
 	if (page == NULL) {
 		return NULL;
 	}
-
+	free(p);
 	return page;
 }
 
@@ -151,19 +157,23 @@ vm_evict_frame (void) {
  * 사용 가능한 메모리 공간을 확보합니다.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
+	struct frame *frame = malloc(sizeof(struct frame));
+	if (frame == NULL) {
+        PANIC("todo");
+    }
 	// palloc으로 프레임 할당
 	frame->kva = palloc_get_page(PAL_USER);
-	frame = malloc(sizeof(struct frame));
 	
 	// 메모리가 가득 찼거나 공간 부족 등으로 실패
-	if (frame == NULL) {
-		palloc_free_page(frame->kva);
+	if (frame->kva == NULL) {
+		free(frame);
 		PANIC("todo"); // swap 처리 필요
 		// 1. evict 대상 프레임 선택
 		// 2. 해당 프레임을 참조하는 페이지 테이블 항목 제거
 		// 3. 필요하면 swap 또는 파일로 기록
 	}
+
+	frame->page = NULL;
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
@@ -193,17 +203,11 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (page == NULL) {
 		return false;
 	}
-	// 3. 페이지가 쓰기 보호 페이지에 대한 쓰기 시도인 경우
-	if (write && !page->file.writable) {
+	// 3. SPT에 있지만 쓰기 보호인 경우
+	if (write && !not_present) {
 		return vm_handle_wp(page);		// 구현 필요
 	}
-	// 4. 페이지가 존재하지 않는 경우 (not_present)
-	if (not_present) {
-		// 페이지를 청구합니다.
-		return vm_do_claim_page (page);
-	}
-	// 존재하는 경우..? -- 이미 있는데 뭘해
-	return false;
+	return vm_do_claim_page (page);
 }
 
 /* Free the page.
@@ -234,16 +238,18 @@ vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
-	frame->page = page;
+	frame->page = page;  
 	page->frame = frame;
 
 	/* TODO: 페이지의 VA를 프레임의 PA에 매핑하기 위해 페이지 테이블 항목을 삽입합니다. */
 	// Frame 테이블에 삽입 -> pml4에 매핑
 	struct thread *curr = thread_current();
-	// pml4에 매핑이 안되면(= 메모리 할당 실패) false 반환
-	if(pml4_get_page (curr->pml4, page->va) == NULL
-			&& pml4_set_page(curr->pml4, page->va, frame->kva, page->file.writable)) {
-		palloc_free_page(frame->kva);
+	// pml4에 매핑(= 메모리 할당 성공)
+	if(!pml4_set_page (curr->pml4, page->va, frame->kva, page->writable)){
+		return false;
+	}
+	// pml4_get_page (curr->pml4, page->va) == frame->kva
+	if(pml4_get_page (curr->pml4, page->va) == NULL){
 		return false;
 	}
 	return swap_in (page, frame->kva);
@@ -254,6 +260,9 @@ void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	/* 해쉬 테이블 초기화 */
 	spt->pages = malloc(sizeof(struct hash));
+	if(spt->pages == NULL){
+		PANIC("spt hash malloc failed");
+	}
 	hash_init(spt->pages, spt_hash_func, spt_less_func, NULL);
 
 }
