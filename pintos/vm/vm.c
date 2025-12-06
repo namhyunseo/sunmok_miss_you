@@ -58,7 +58,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		// 1. 페이지 생성 - palloc으로 할당 하려 하였으나 remove쪽에서 free하기 때문에 malloc으로 변경
 		struct page *page = malloc(sizeof(struct page));
-
 		if (page == NULL)
 			goto err;
 		// 2. uninit 페이지로 초기화 - "uninit" 페이지 구조체를 생성
@@ -76,15 +75,10 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			case VM_ANON | VM_MARKER_0:
 				page->uninit.page_initializer = anon_initializer;
 				break;
-			// TODO: 논의 필요
-			// case VM_UNINIT:
-			// 	page->uninit.page_initializer = NULL;
-			// 	break;
 			default:
 				free(page);
 				goto err;
 		}
-		// TODO: 페이지가 insert가 되지 않는다면
 		// 3. spt에 페이지 삽입
 		if (spt_insert_page(spt, page)){
 			return true;
@@ -107,7 +101,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	// 초기화되지 않은 페이지의 va를 찾을 때 문제가 될 수도?
 	struct page *p = malloc(sizeof(struct page));
 	p->va = pg_round_down(va);
-	struct hash_elem *e = hash_find(spt->pages, &p->he);
+	struct hash_elem *e = hash_find(&spt->pages, &p->he);
 	if(e == NULL){
 		free(p);
 		return NULL;
@@ -128,7 +122,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	bool succ = false;
 
-	struct hash_elem *old = hash_insert(spt->pages, &page->he);
+	struct hash_elem *old = hash_insert(&spt->pages, &page->he);
 	if (old == NULL) { 
 		succ = true;
 	}
@@ -217,7 +211,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	// 3. SPT에 있지만 쓰기 보호인 경우
 	// TODO: not_prsent가 정확히 어떤 변수인지 -- PTE 테이블에 없다
 	// 단순 존재하지 않는다가 spt에서 존재하지 않는 것인지
-	if (write && !not_present) {
+	if (write && !not_present && !page->writable) {
 		return vm_handle_wp(page);		// 구현 필요
 	}
 	return vm_do_claim_page (page);
@@ -272,11 +266,7 @@ vm_do_claim_page (struct page *page) {
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 	/* 해쉬 테이블 초기화 */
-	spt->pages = malloc(sizeof(struct hash));
-	if(spt->pages == NULL){
-		PANIC("spt hash malloc failed");
-	}
-	hash_init(spt->pages, spt_hash_func, spt_less_func, NULL);
+	hash_init(&spt->pages, spt_hash_func, spt_less_func, NULL);
 
 }
 
