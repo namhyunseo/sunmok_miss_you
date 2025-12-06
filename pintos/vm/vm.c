@@ -270,13 +270,57 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 
 }
 
-/* Copy supplemental page table from src to dst */
+/* src에서 dst로 보충 페이지 테이블 복사 */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
+	// 해시 테이블을 순회하는 i
+	struct hash_iterator i;
+	// i와 src의 해시 테이블 연결?
+	hash_first (&i, &src->pages);
+	
+	while (hash_next (&i))
+	{
+		// 하나의 페이지를 가져옴
+		struct page *p = hash_entry (hash_cur (&i), struct page, he);
+		if(page_get_type(p) == VM_ANON){
+			if(!vm_alloc_page_with_initializer(VM_ANON, p->va, p->writable,
+				p->uninit.init, p->uninit.aux))
+				{
+					return false;
+				}
+			if(!vm_claim_page(p->va)){
+				return false;
+			}
+		}
+		else if(page_get_type(p) == VM_FILE){
+			if(!vm_alloc_page_with_initializer(VM_FILE, p->va, p->writable,
+				p->uninit.init, p->uninit.aux))
+				{
+					return false;
+				}
+			if(!vm_claim_page(p->va)){
+				return false;
+			}
+		}
+		else if(page_get_type(p) == VM_ANON | VM_MARKER_0){
+			if(!vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, p->va, p->writable,
+				p->uninit.init, p->uninit.aux))
+				{
+					return false;
+				}
+			if(!vm_claim_page(p->va)){
+				return false;
+			}
+		}
+		else{
+			return false;
+		}
+	}
+	return true;
 }
 
-/* Free the resource hold by the supplemental page table */
+/* SPT의 리소스 보류 해제 */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
