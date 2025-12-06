@@ -101,7 +101,8 @@ spt_find_page (struct  supplemental_page_table *spt UNUSED, void *va UNUSED) {
 
 	struct page p;
 	struct hash_elem *e;
-	p.va = va;
+	void *upage = pg_round_down (va);
+	p.va = upage;
 	e = hash_find(&spt->pages, &p.he);
 	if (e == NULL) return NULL;
 
@@ -187,8 +188,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	
 	/* va가 SPT에 있는지 확인*/
-	void *upage = pg_round_down (addr);
-	if(!(page = spt_find_page(spt, upage))) return false;
+	if(!(page = spt_find_page(spt, addr))) return false;
 
 	/* write access */
 	if(write && !page->writable){
