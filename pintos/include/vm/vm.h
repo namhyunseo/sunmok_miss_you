@@ -48,6 +48,7 @@ struct page {
 
 	/* project3 spt */
 	struct hash_elem he;
+	bool writable;         /* True if writable, false if read-only */
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -87,7 +88,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-	struct hash *pages;
+	struct hash pages;
 };
 
 #include "threads/thread.h"
@@ -119,5 +120,14 @@ spt_hash_func (const struct hash_elem *hash_e, void *aux);
 static bool
 spt_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
+
+struct file_load_aux
+{
+	struct file *file;
+	off_t offset;
+	size_t read_bytes;
+	size_t zero_bytes;
+	// bool writable;
+};
 
 #endif  /* VM_VM_H */
