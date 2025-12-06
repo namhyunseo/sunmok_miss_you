@@ -67,16 +67,13 @@ hash_clear (struct hash *h, hash_action_func *destructor) {
 	h->elem_cnt = 0;
 }
 
-/* Destroys hash table H.
+/* 해시 테이블 H를 파괴합니다.
 
-   If DESTRUCTOR is non-null, then it is first called for each
-   element in the hash.  DESTRUCTOR may, if appropriate,
-   deallocate the memory used by the hash element.  However,
-   modifying hash table H while hash_clear() is running, using
-   any of the functions hash_clear(), hash_destroy(),
-   hash_insert(), hash_replace(), or hash_delete(), yields
-   undefined behavior, whether done in DESTRUCTOR or
-   elsewhere. */
+DESTRUCTOR가 null이 아니면, 해시의 각 요소에 대해 먼저 호출됩니다. 
+DESTRUCTOR는 필요한 경우 해시 요소가 사용하는 메모리를 할당 해제할 수 있습니다.
+그러나 hash_clear()가 실행 중인 동안 hash_clear(), hash_destroy(),
+hash_insert(), hash_replace() 또는 hash_delete() 함수를 사용하여 해시 테이블 H를 수정하면
+DESTRUCTOR에서든 다른 곳에서든 정의되지 않은 동작이 발생합니다. */
 void
 hash_destroy (struct hash *h, hash_action_func *destructor) {
 	if (destructor != NULL)
@@ -124,13 +121,11 @@ hash_find (struct hash *h, struct hash_elem *e) {
 	return find_elem (h, find_bucket (h, e), e);
 }
 
-/* Finds, removes, and returns an element equal to E in hash
-   table H.  Returns a null pointer if no equal element existed
-   in the table.
+/* 해시 테이블 H에서 E와 동일한 요소를 찾아 제거하고 반환합니다. 
+테이블에 동일한 요소가 없으면 null 포인터를 반환합니다.
 
-   If the elements of the hash table are dynamically allocated,
-   or own resources that are, then it is the caller's
-   responsibility to deallocate them. */
+해시 테이블의 요소가 동적으로 할당되거나
+해시 테이블의 리소스가 동적으로 할당된 경우, 해당 리소스를 해제하는 것은 호출자의 책임입니다. */
 struct hash_elem *
 hash_delete (struct hash *h, struct hash_elem *e) {
 	struct hash_elem *found = find_elem (h, find_bucket (h, e), e);

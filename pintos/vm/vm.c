@@ -323,8 +323,25 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 /* SPT의 리소스 보류 해제 */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
+	/* 스레드가 보유한 모든 supplemental_page_table을 파기하고 
+	  수정된 모든 내용을 저장소에 다시 기록합니다. */
+	// hash_destroy - 해시 안에 있는 모든 요소 제거 및 자기 자신도 파괴
+	// hash_clear - 해시 안에 있는 모든 요소 제거
+	if(spt != NULL){
+		hash_destroy(&spt->pages, destructor);
+	}
+	// TODO: '수정된 모든 내용을 저장소에 다시 기록' -- 무슨 말이지?
+}
+
+/* SPT의 리소스 삭제를 위한 action 함수 */
+static void	
+destructor (struct hash_elem *e, void *aux){
+	// hash_elem에서 page 추출
+	struct page *page = hash_entry(e, struct page, he);
+
+	// 해당 페이지와 aux 제거
+	vm_dealloc_page (page);
+	free(aux);
 }
 
 /* va에 대한 hash값을 구해서 반환한다. */

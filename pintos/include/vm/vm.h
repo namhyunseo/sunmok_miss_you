@@ -120,6 +120,8 @@ spt_hash_func (const struct hash_elem *hash_e, void *aux);
 static bool
 spt_less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
+static void	
+destructor (struct hash_elem *e, void *aux);
 
 struct file_load_aux
 {
