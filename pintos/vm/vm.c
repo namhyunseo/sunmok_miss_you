@@ -254,10 +254,7 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;  
 	page->frame = frame;
 
-	/* TODO: 페이지의 VA를 프레임의 PA에 매핑하기 위해 페이지 테이블 항목을 삽입합니다. */
-	// Frame 테이블에 삽입 -> pml4에 매핑
 	struct thread *curr = thread_current();
-	// pml4에 매핑(= 메모리 할당 성공)
 	if(!pml4_set_page (curr->pml4, page->va, frame->kva, page->writable)){
 		return false;
 	}
@@ -276,8 +273,6 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 }
 
 /* Copy supplemental page table from src to dst */
-// pintos -v -k -T 60 -m 20   --fs-disk=10 -p tests/userprog/fork-once:fork-once --swap-disk=4 -- -q   -f run fork-once < /dev/null 2> tests/userprog/fork-once.errors
-// pintos --gdb -v -k -T 600 -m 20   --fs-disk=10 -p tests/userprog/fork-once:fork-once --swap-disk=4 -- -q   -f run fork-once < /dev/null 2> tests/userprog/fork-once.errors
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
@@ -294,15 +289,17 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct thread *curr = thread_current();
 		/* 새로운 aux 생성 및 복사 -> 참조형식으로 변경 */
 		struct file_load_aux *par_aux = par_page->uninit.aux;
-		// struct file_load_aux *new_aux = malloc(sizeof(struct file_load_aux));
-		// if(new_aux == NULL){
-		// 	return false;
-		// }
-		// *new_aux = *par_aux;
 
+		/* 요녀석은 하면 안되는걸까 판단해보자. */
+		
 		/* page frame이 할당이 안된 경우 = 페이지가 초기상태일 때*/
 		if(par_page->frame == NULL){
-			struct file_load_aux *new_aux = par_aux;
+			struct file_load_aux *new_aux = malloc(sizeof(struct file_load_aux));
+			new_aux->file = par_aux->file;
+			new_aux->offset = par_aux->offset;
+			new_aux->read_bytes = par_aux->read_bytes;
+			new_aux->zero_bytes = par_aux->zero_bytes;
+			// struct file_load_aux *new_aux = par_aux;
 			if(vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, new_aux))
 				continue;
 			else{
@@ -314,25 +311,31 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 		if(!vm_alloc_page(type, upage, writable)){
 			return false;
 		}
+		if(!vm_claim_page(upage))
+		return false;
+		
 		struct page *chd_page = spt_find_page(dst, upage);
 		if(chd_page == NULL){
 			return false;
 		}
-		if(!vm_do_claim_page(chd_page))
-			return false;
-		
+
 		memcpy(chd_page->frame->kva, par_page->frame->kva, PGSIZE);
 	}
 	return true;
 
 }
 
+static void destructor(struct hash_elem *he, void *aux) {
+	struct page *page = hash_entry(he, struct page, he);
+	struct frame *frame = page->frame;
+	vm_dealloc_page(page);
+}
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
-	/* thread가 보유한 모든 보조 페이지 테이블을 파기한다. 수정된 모든 내용을 저장 장치에 기록한다. */
-
+	hash_clear(&spt->pages, destructor);
 }
+
 
 /* va에 대한 hash값을 구해서 반환한다. */
 static uint64_t
@@ -356,4 +359,3 @@ spt_less_func (const struct hash_elem *a,
 
 	return page_a->va > page_b->va;
 }
-
