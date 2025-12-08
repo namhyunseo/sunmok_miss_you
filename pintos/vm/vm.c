@@ -201,10 +201,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
-	/* 페이지 유효성 검사 */
-	// TODO : spt_find_page안에서 pg_round_down을 하는 것이 아닌 여기서만 하는 것이 맞겠다.
-	// 1. spt에서 페이지 찾기
-	/* va가 SPT에 있는지 확인*/
+	
 	if(!(page = spt_find_page(spt, addr))) return false;
 
 	/* write access */
@@ -287,10 +284,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 		bool writable = par_page->writable;
 		struct vm_intializer *init = par_page->uninit.init;
 		struct thread *curr = thread_current();
-		/* 새로운 aux 생성 및 복사 -> 참조형식으로 변경 */
 		struct file_load_aux *par_aux = par_page->uninit.aux;
-
-		/* 요녀석은 하면 안되는걸까 판단해보자. */
 		
 		/* page frame이 할당이 안된 경우 = 페이지가 초기상태일 때*/
 		if(par_page->frame == NULL){
