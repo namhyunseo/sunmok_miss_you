@@ -276,6 +276,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
+	
 	// 해시 테이블을 순회하는 i
 	struct hash_iterator i;
 	// i와 src의 해시 테이블 연결?
@@ -285,39 +286,62 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 	{
 		// 하나의 페이지를 가져옴
 		struct page *p = hash_entry (hash_cur (&i), struct page, he);
-		if(page_get_type(p) == VM_ANON){
+
+		// 해당 페이지의 va가 pml4에 없다면 할당 X
+		// memcpy로 페이지 복사
+		if(p->frame == NULL){
+			// 깊은 복사를 해야하는 aux
+			struct file_load_aux *new_aux = (struct file_load_aux *)malloc(sizeof(struct file_load_aux));
+			if(p->uninit.aux != NULL){
+				struct file_load_aux *old_aux = (struct file_load_aux *)p->uninit.aux;
+				new_aux->file = old_aux->file;
+				new_aux->offset = old_aux->offset;
+				new_aux->read_bytes = old_aux->read_bytes;
+				new_aux->zero_bytes = old_aux->zero_bytes;
+			}
+			else{
+				new_aux = NULL;
+			}
 			if(!vm_alloc_page_with_initializer(VM_ANON, p->va, p->writable,
-				p->uninit.init, p->uninit.aux))
+				p->uninit.init, new_aux))
 				{
 					return false;
 				}
-			if(!vm_claim_page(p->va)){
-				return false;
-			}
-		}
-		else if(page_get_type(p) == VM_FILE){
-			if(!vm_alloc_page_with_initializer(VM_FILE, p->va, p->writable,
-				p->uninit.init, p->uninit.aux))
-				{
-					return false;
-				}
-			if(!vm_claim_page(p->va)){
-				return false;
-			}
-		}
-		else if(page_get_type(p) == VM_ANON | VM_MARKER_0){
-			if(!vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, p->va, p->writable,
-				p->uninit.init, p->uninit.aux))
-				{
-					return false;
-				}
-			if(!vm_claim_page(p->va)){
-				return false;
-			}
 		}
 		else{
-			return false;
+			if(page_get_type(p) == VM_ANON){
+				if(!vm_alloc_page(VM_ANON, p->va, p->writable))
+				{
+					return false;
+				}
+
+				if(!vm_claim_page(p->va)){
+					return false;
+				}
+			}
+			else if(page_get_type(p) == VM_FILE){
+				if(!vm_alloc_page(VM_FILE, p->va, p->writable))
+				{
+					return false;
+				}
+
+				if(!vm_claim_page(p->va)){
+					return false;
+				}
+				// 파일은 오프셋, 읽기 바이트, 제로 바이트 등도 복사해야 함 -- 추후?
+			}
+			// memcpy로 vm_claim_page로 할당된 페이지에 내용 복사
+			struct page *dst_page = spt_find_page (dst, p->va);
+			
+			if(dst_page == NULL){
+				return false;
+			}
+			if(dst_page->frame == NULL){
+				return false;
+			}
+			memcpy(dst_page->frame->kva, p->frame->kva, PGSIZE);
 		}
+		
 	}
 	return true;
 }

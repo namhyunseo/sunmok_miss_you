@@ -180,7 +180,7 @@ __do_fork (void *aux_) {
 		do_iret (&if_);
 	}
 	error:
-	// 여기서도 파일 디스크립터, pml4 정리..?
+	// 여기서도 파일 디스크립터, pml4 정리..? + spt도
 		for (int i = 0; i < FD_MAX; i++) {
 			if (current->fd_table[i]) {
 				file_close(current->fd_table[i]);
@@ -191,6 +191,9 @@ __do_fork (void *aux_) {
 			pml4_destroy(current->pml4);
 			current->pml4 = NULL;
 		}
+#ifdef VM
+		supplemental_page_table_kill(&current->spt);
+#endif
 		parent->fork_succ = false;
 		sema_up(&parent->fork_sema);
 		thread_exit ();
