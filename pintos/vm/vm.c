@@ -201,7 +201,9 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* 페이지 유효성 검사 */
-	// TODO : spt_find_page안에서 pg_round_down을 하는 것이 아닌 여기서만 하는 것이 맞겠다.
+	if(not_present == false){
+		return false;
+	}
 	// 1. spt에서 페이지 찾기
 	page = spt_find_page(spt,addr);
 	// 2. 페이지가 존재하지 않으면 segfault
@@ -211,7 +213,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	// 3. SPT에 있지만 쓰기 보호인 경우
 	// TODO: not_prsent가 정확히 어떤 변수인지 -- PTE 테이블에 없다
 	// 단순 존재하지 않는다가 spt에서 존재하지 않는 것인지
-	if (write && !not_present && !page->writable) {
+	if (write && !page->writable) {
 		return vm_handle_wp(page);		// 구현 필요
 	}
 	return vm_do_claim_page (page);
@@ -327,8 +329,8 @@ supplemental_page_table_kill (struct supplemental_page_table *spt) {
 	  수정된 모든 내용을 저장소에 다시 기록합니다. */
 	// hash_destroy - 해시 안에 있는 모든 요소 제거 및 자기 자신도 파괴
 	// hash_clear - 해시 안에 있는 모든 요소 제거
-	if(spt != NULL){
-		hash_destroy(&spt->pages, destructor);
+	if(&spt->pages != NULL){
+		hash_clear(&spt->pages, destructor);
 	}
 	// TODO: '수정된 모든 내용을 저장소에 다시 기록' -- 무슨 말이지?
 }
@@ -340,8 +342,10 @@ destructor (struct hash_elem *e, void *aux){
 	struct page *page = hash_entry(e, struct page, he);
 
 	// 해당 페이지와 aux 제거
+	if(page->uninit.aux == aux){
+		free(page->uninit.aux);
+	}
 	vm_dealloc_page (page);
-	free(aux);
 }
 
 /* va에 대한 hash값을 구해서 반환한다. */

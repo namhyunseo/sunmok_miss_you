@@ -12,6 +12,7 @@
 #include "filesys/filesys.h"
 #include "userprog/process.h"
 #include "console.h"
+#include "vm/vm.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -56,12 +57,11 @@ validate_addr (void *addr) {
 	    thread_current()->exit_num = -1;
 	    thread_exit();
 	}
-	uint64_t *pm = thread_current()->pml4;
-	if (pml4_get_page(pm, addr) == NULL) {
+	struct supplemental_page_table *spt = &thread_current()->spt;
+	if (spt_find_page(spt, addr) == NULL) {
 	    thread_current()->exit_num = -1;
 	    thread_exit();
 	}
-
 }
 
 void
@@ -187,7 +187,7 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 				break;
 			}
 			uint64_t *pm = thread_current()->pml4;
-			bool is_mapped_pte = pml4_get_page(pm, file_name);
+			bool is_mapped_pte = pml4_get_page(pm, file_name);	// 추후 변경 필요 -- page fault 처리 전에 이미 -1 반환
 			// validate mapping, fileName
 			if(!is_mapped_pte){
 				curr->exit_num = -1;
