@@ -57,7 +57,7 @@ validate_addr (void *addr) {
 	    thread_exit();
 	}
 	uint64_t *pm = thread_current()->pml4;
-	if (pml4_get_page(pm, addr) == NULL) {
+	if (!spt_find_page(&thread_current()->spt, addr)) {
 	    thread_current()->exit_num = -1;
 	    thread_exit();
 	}
