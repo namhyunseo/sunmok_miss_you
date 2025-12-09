@@ -189,6 +189,12 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	addr = pg_round_down(addr);
+	
+	// 페이지 할당
+	if(vm_alloc_page(VM_ANON, addr, true) == false) {
+		return;
+	} 
 }
 
 /* write_protected 페이지에서 오류를 처리합니다. */
@@ -203,16 +209,30 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	
-	if(!(page = spt_find_page(spt, addr))) return false;
-
-	/* write access */
-	if(write && !page->writable){
-		return vm_handle_wp(page);
-	}
-
 	/* present */
 	bool suc_claim = true;
 	if(not_present){
+		
+		/* rsp가 커널 모드에서 fault가 났다면 */
+		void *rsp = user ? f->rsp : thread_current()->rsp;
+
+		// 조건
+		// rsp - 8 >= addr -- 스택 성장 가능 방향인지 확인
+		// addr > USER_STACK -- 스택 성장 가능 방향인지 확인
+		// addr >= USER_STACK - 0x100000 -- 1MB 이내
+		// is_user_vaddr(addr) → 유저 공간인지 확인
+
+		if (is_user_vaddr(addr) && addr >= USER_STACK - 0x100000 
+				&& addr < USER_STACK && addr >= rsp - 8) {
+			vm_stack_growth(addr);
+		}
+		if(!(page = spt_find_page(spt, addr))) return false;
+		
+		/* write access */
+		if(write && !page->writable){
+			return vm_handle_wp(page);
+		}
+
 		return vm_do_claim_page(page);
 	}
 
