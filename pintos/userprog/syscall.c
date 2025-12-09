@@ -105,6 +105,7 @@ validate_fd (int fd) {
 /* The main system call interface */
 void syscall_handler (struct intr_frame *f UNUSED) {
 	uint64_t rax = f->R.rax;
+	thread_current()->rsp = f->rsp; // vm에서 stack growth할 때 필요해서 현재 rsp저장
 
 	switch(rax) {
 		case SYS_WRITE : 
