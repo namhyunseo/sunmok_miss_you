@@ -56,8 +56,8 @@ validate_addr (void *addr) {
 	    thread_current()->exit_num = -1;
 	    thread_exit();
 	}
-	uint64_t *pm = thread_current()->pml4;
-	if (pml4_get_page(pm, addr) == NULL) {
+
+	if (!spt_find_page(&thread_current()->spt, addr)) {
 	    thread_current()->exit_num = -1;
 	    thread_exit();
 	}
@@ -186,8 +186,8 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 				thread_exit();
 				break;
 			}
-			uint64_t *pm = thread_current()->pml4;
-			bool is_mapped_pte = pml4_get_page(pm, file_name);
+			
+			bool is_mapped_pte = spt_find_page(&curr->spt, file_name);
 			// validate mapping, fileName
 			if(!is_mapped_pte){
 				curr->exit_num = -1;

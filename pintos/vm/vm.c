@@ -7,6 +7,7 @@
 /* project3 spt */
 #include "hash.h"
 #include "threads/mmu.h"
+#include "string.h"
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -109,6 +110,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	
 	page = hash_entry(e, struct page, he);
 
+	/* page 없으면 NULL 반환*/
 	if (page == NULL) {
 		return NULL;
 	}
@@ -200,21 +202,23 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
-	/* 페이지 유효성 검사 */
-	// TODO : spt_find_page안에서 pg_round_down을 하는 것이 아닌 여기서만 하는 것이 맞겠다.
-	// 1. spt에서 페이지 찾기
-	page = spt_find_page(spt,addr);
-	// 2. 페이지가 존재하지 않으면 segfault
-	if (page == NULL) {
-		return false;
+	
+	if(!(page = spt_find_page(spt, addr))) return false;
+
+	/* write access */
+	if(write && !page->writable){
+		return vm_handle_wp(page);
 	}
-	// 3. SPT에 있지만 쓰기 보호인 경우
-	// TODO: not_prsent가 정확히 어떤 변수인지 -- PTE 테이블에 없다
-	// 단순 존재하지 않는다가 spt에서 존재하지 않는 것인지
-	if (write && !not_present && !page->writable) {
-		return vm_handle_wp(page);		// 구현 필요
+
+	/* present */
+	bool suc_claim = true;
+	if(not_present){
+		return vm_do_claim_page(page);
 	}
-	return vm_do_claim_page (page);
+
+	/* user에 대한 평가도 진행하긴 해야할 것 같다. 그런데 뭘 해야할지 모르겠음*/
+
+	return false;
 }
 
 /* Free the page.
@@ -248,14 +252,10 @@ vm_do_claim_page (struct page *page) {
 	frame->page = page;  
 	page->frame = frame;
 
-	/* TODO: 페이지의 VA를 프레임의 PA에 매핑하기 위해 페이지 테이블 항목을 삽입합니다. */
-	// Frame 테이블에 삽입 -> pml4에 매핑
 	struct thread *curr = thread_current();
-	// pml4에 매핑(= 메모리 할당 성공)
 	if(!pml4_set_page (curr->pml4, page->va, frame->kva, page->writable)){
 		return false;
 	}
-	// pml4_get_page (curr->pml4, page->va) == frame->kva
 	if(pml4_get_page (curr->pml4, page->va) == NULL){
 		return false;
 	}
@@ -274,14 +274,63 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
 		struct supplemental_page_table *src) {
+	
+	struct hash_iterator i;
+	hash_first (&i, &src->pages);
+
+	while(hash_next(&i)){
+	    struct page *par_page = hash_entry (hash_cur (&i), struct page, he);
+		void *upage = par_page->va;
+		enum vm_type type = par_page->uninit.type;
+		bool writable = par_page->writable;
+		struct vm_intializer *init = par_page->uninit.init;
+		struct thread *curr = thread_current();
+		struct file_load_aux *par_aux = par_page->uninit.aux;
+		
+		/* page frame이 할당이 안된 경우 = 페이지가 초기상태일 때*/
+		if(par_page->frame == NULL){
+			struct file_load_aux *new_aux = malloc(sizeof(struct file_load_aux));
+			new_aux->file = par_aux->file;
+			new_aux->offset = par_aux->offset;
+			new_aux->read_bytes = par_aux->read_bytes;
+			new_aux->zero_bytes = par_aux->zero_bytes;
+			// struct file_load_aux *new_aux = par_aux;
+			if(vm_alloc_page_with_initializer(VM_ANON, upage, writable, init, new_aux))
+				continue;
+			else{
+				free(new_aux);
+				return false;
+			}
+		}
+
+		if(!vm_alloc_page(type, upage, writable)){
+			return false;
+		}
+		if(!vm_claim_page(upage))
+		return false;
+		
+		struct page *chd_page = spt_find_page(dst, upage);
+		if(chd_page == NULL){
+			return false;
+		}
+
+		memcpy(chd_page->frame->kva, par_page->frame->kva, PGSIZE);
+	}
+	return true;
+
 }
 
+static void destructor(struct hash_elem *he, void *aux) {
+	struct page *page = hash_entry(he, struct page, he);
+	struct frame *frame = page->frame;
+	vm_dealloc_page(page);
+}
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt) {
-	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
+	hash_clear(&spt->pages, destructor);
 }
+
 
 /* va에 대한 hash값을 구해서 반환한다. */
 static uint64_t
@@ -305,4 +354,3 @@ spt_less_func (const struct hash_elem *a,
 
 	return page_a->va > page_b->va;
 }
-
