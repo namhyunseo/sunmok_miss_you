@@ -110,6 +110,7 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	
 	page = hash_entry(e, struct page, he);
 
+	/* page 없으면 NULL 반환*/
 	if (page == NULL) {
 		return NULL;
 	}
@@ -212,12 +213,12 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	/* present */
 	bool suc_claim = true;
 	if(not_present){
-		bool suc_claim = vm_do_claim_page (page);
+		return vm_do_claim_page(page);
 	}
 
 	/* user에 대한 평가도 진행하긴 해야할 것 같다. 그런데 뭘 해야할지 모르겠음*/
 
-	return suc_claim;
+	return false;
 }
 
 /* Free the page.

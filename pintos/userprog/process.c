@@ -716,11 +716,17 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO : 파일에서 세그먼트를 로드합니다.
 	   주소 VA에서 첫 번째 페이지 폴트가 발생할 때 호출됩니다.
 	   VA는 이 함수를 호출할 때 사용할 수 있습니다. */
-	if(file_read_at(load_aux->file, page->frame->kva, load_aux->read_bytes, load_aux->offset) != (int) load_aux->read_bytes){
+	struct file *file = load_aux->file;
+	void *kva = page->frame->kva;
+	size_t read_bytes = load_aux->read_bytes;
+	size_t zero_bytes = load_aux->zero_bytes;
+	off_t ofs = load_aux->offset;
+	
+	if(file_read_at(file, kva, read_bytes, ofs) != (int) read_bytes){
 		free(aux);
 		return false;
 	}
-	memset(page->frame->kva + load_aux->read_bytes, 0, load_aux->zero_bytes);
+	memset(kva + read_bytes, 0, zero_bytes);
 	free(aux);
 	return true;
 }
