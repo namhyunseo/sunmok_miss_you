@@ -186,10 +186,10 @@ void syscall_handler (struct intr_frame *f UNUSED) {
 				thread_exit();
 				break;
 			}
-			uint64_t *pm = thread_current()->pml4;
-			bool is_mapped_spt = spt_find_page(pm, file_name);
+			struct supplemental_page_table *spt = &thread_current()->spt;
+			struct page *is_mapped_spt = spt_find_page(spt, file_name);
 			// validate mapping, fileName
-			if(!is_mapped_spt){
+			if(is_mapped_spt == NULL){
 				curr->exit_num = -1;
 				thread_exit();
 				break;
