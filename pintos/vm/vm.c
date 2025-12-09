@@ -300,6 +300,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 				new_aux->zero_bytes = old_aux->zero_bytes;
 			}
 			else{
+				free(new_aux);
 				new_aux = NULL;
 			}
 			if(!vm_alloc_page_with_initializer(VM_ANON, p->va, p->writable,
